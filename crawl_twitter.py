@@ -83,8 +83,8 @@ class TweetSearcher(object):
             'max_position': max_position,
             'src' : 'typd'
         }
-        resp = requests.get(TweetSearcher.baseurl, params=payload)
-        js = json.loads(resp.text, 'utf-8')
+        raw = requests.get(TweetSearcher.baseurl, params=payload)
+        js = json.loads(raw.text, 'utf-8')
         return Response(js['has_more_items'], js['items_html'])
 
 
