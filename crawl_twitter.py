@@ -83,7 +83,7 @@ class TweetSearcher(object):
             'max_position': max_position,
             'src' : 'typd'
         }
-        raw = requests.get(TweetSearcher.baseurl, params=payload)
+        resp = requests.get(TweetSearcher.baseurl, params=payload)
         js = json.loads(resp.text, 'utf-8')
         return Response(js['has_more_items'], js['items_html'])
 
@@ -120,7 +120,6 @@ def parse_tweet(soup):
 
             tweet = Tweet(tweet_id, text, user, timestamp, rt, fv)
             results.append(tweet)
-
     except KeyError:
         pass
 
