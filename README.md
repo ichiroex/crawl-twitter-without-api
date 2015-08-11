@@ -5,6 +5,8 @@ Twitter crawling script without official API
 
 Requirements
 ---
+    $ pip3 install -r requirements.txt
+
     $ pip3 freeze
     beautifulsoup4 (4.3.2)
     docopt (0.6.2)
