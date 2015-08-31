@@ -17,5 +17,9 @@ Requirements
 
 Usage
 ---
-    $ python3 crawl_twitter.py --word="hoge" --since=2015-01-01 --until=2015-01-10
-    $ python3 crawl_twitter.py --user=hoge --since=2015-01-01 --until=2015-01-10
+    $ python3 crawl_twitter.py --word="hoge AND huga" --since=2015-01-01 --until=2015-01-10 > result
+    $ python3 crawl_twitter.py --user=hoge --since=2015-01-01 --until=2015-01-10 > result
+
+Misc.
+---
+- You can change (or delete) default target language. (Default: lang:ja)

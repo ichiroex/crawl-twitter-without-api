@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3 # -*- coding: utf-8 -*-
 
 # Author: mhiro2
 
@@ -17,7 +16,9 @@ options:
 
 import csv
 import json
+import random
 import requests
+import sys
 import time
 from bs4 import BeautifulSoup
 from collections import namedtuple
@@ -27,119 +28,123 @@ from docopt import docopt
 # Structure definition
 User = namedtuple('User', ['user_id', 'user_name', 'user_screen_name'])
 Tweet = namedtuple('Tweet', ['tweet_id', 'tweet', 'user', 'timestamp', 'retweets', 'favourites'])
-Response = namedtuple('Response', ['has_more_items', 'items_html'])
 
 
 class TweetSearcher(object):
     baseurl = 'https://twitter.com/i/search/timeline?'
 
-    def __init__(self, query):
+    def __init__(self, query, wait_time=0, error_delay=5):
         self.query = query
-        self.maxtweet = None
-        self.mintweet = None
+        self.wait_time = wait_time
+        self.error_delay = error_delay
 
     def run(self):
-        payload = {
-            'q': self.query,
-            'f': 'tweets',
-            'include_available_features': 1,
-            'include_entities': 1,
-            'last_note_ts': int(time.time()),
-            'src' : 'typd'
-        }
-        raw = requests.get(TweetSearcher.baseurl, params=payload)
-        js = json.loads(raw.text, 'utf-8')
-        response = Response(js['has_more_items'], js['items_html'])
+        payload = self.construct_payload()
+        response = self.execute_search(payload)
 
-        soup = BeautifulSoup(response.items_html, 'lxml')
-        result = parse_tweet(soup)
+        min_tweet_id = None
+        result = []
 
-        if result:
-            self.mintweet = result[0].tweet_id
-            self.maxtweet = result[-1].tweet_id
+        while response is not None and response['items_html'] is not None:
+            tweets = self.parse_tweet(response['items_html'])
 
-        while response.has_more_items:
-            if self.mintweet == self.maxtweet:
+            if not tweets:
                 break
-            max_position = 'TWEET-{0}-{1}'.format(self.maxtweet, self.mintweet)
+            else:
+                result.extend(tweets)
 
-            response = self.tweet_search_previous(max_position)
-            soup = BeautifulSoup(response.items_html, 'lxml')
-            current_result = parse_tweet(soup)
-
-            result.extend(current_result)
-            self.mintweet = current_result[0].tweet_id
-            self.maxtweet = current_result[-1].tweet_id
+            if not min_tweet_id:
+                min_tweet_id = tweets[0].tweet_id
+#
+            max_tweet_id = tweets[-1].tweet_id
+#
+            if min_tweet_id != max_tweet_id:
+                max_position = 'TWEET-{0}-{1}'.format(max_tweet_id, min_tweet_id)
+                payload = self.construct_payload(max_position=max_position)
+                time.sleep(random.randint(0, self.wait_time))
+                response = self.execute_search(payload)
 
         return result
 
-    def tweet_search_previous(self, max_position):
+    def construct_payload(self, max_position=None):
         payload = {
             'q': self.query,
             'f': 'tweets',
-            'include_available_features': 1,
-            'include_entities': 1,
-            'last_note_ts': int(time.time()),
-            'max_position': max_position,
-            'src' : 'typd'
+            'lang' : 'ja'
         }
-        raw = requests.get(TweetSearcher.baseurl, params=payload)
-        js = json.loads(raw.text, 'utf-8')
-        return Response(js['has_more_items'], js['items_html'])
 
+        if max_position is not None:
+            payload['max_position'] = max_position
 
-def parse_tweet(soup):
-    results = []
-    try:
-        for t in soup.find_all('li', class_='js-stream-item'):
+        return payload
+
+    def execute_search(self, payload):
+        try:
+            response = requests.get(TweetSearcher.baseurl, params=payload)
+            data = json.loads(response.text, 'utf-8')
+            return data
+
+        except ValueError as e:
+            print(e.message)
+            print('Response Error!! wait {0} seconds'.format(self.error_delay),
+                  file=sys.stderr)
+            sleep(self.error_delay)
+            return self.execute_search(url)
+
+    @staticmethod
+    def parse_tweet(html):
+        soup = BeautifulSoup(html,  'lxml')
+        tweet_list = []
+
+        for li in soup.find_all('li', class_='js-stream-item'):
+            if 'data-item-id' not in li.attrs:
+                continue
+
             # tweet id
-            tweet_id = t['data-item-id']
-
+            tweet_id = li['data-item-id']
+    
             # body text
-            text = t.find('p', class_='js-tweet-text').text
-
+            text = li.find('p', class_='js-tweet-text').text
+    
             # timestamp
-            unix_timestamp = t.find('span',class_='_timestamp')['data-time']
+            unix_timestamp = li.find('span',class_='_timestamp')['data-time']
             timestamp = datetime.fromtimestamp(int(unix_timestamp))
-
+    
             # user information
-            user_tag = t.find('div', class_='tweet')
+            user_tag = li.find('div', class_='tweet')
             user = User(user_tag['data-user-id'],
                         user_tag['data-name'],
                         user_tag['data-screen-name'])
-
+    
             # retweets
-            rt_tag = t.find('span', class_='ProfileTweet-action--retweet')
+            rt_tag = li.find('span', class_='ProfileTweet-action--retweet')
             rt = (rt_tag.find('span',class_='ProfileTweet-actionCount')
                   ['data-tweet-stat-count'])
-
+    
             # favorites
-            fv_tag = t.find('span', class_='ProfileTweet-action--favorite')
+            fv_tag = li.find('span', class_='ProfileTweet-action--favorite')
             fv = (fv_tag.find('span',class_='ProfileTweet-actionCount')
                   ['data-tweet-stat-count'])
-
+    
             tweet = Tweet(tweet_id, text, user, timestamp, rt, fv)
-            results.append(tweet)
-    except KeyError:
-        pass
+            tweet_list.append(tweet)
 
-    return results
+        return tweet_list
 
 
-def write_csv(tweets, filename):
+def print_csv(tweets):
     field_names = ['tweet_id', 'tweet', 'user_id', 'user_name',
                    'user_screen_name', 'timestamp', 'retweets', 'favourites']
 
-    with open(filename, 'w') as f:
-        writer = csv.DictWriter(f, field_names, lineterminator='\n')
-        writer.writeheader()
+    writer = csv.DictWriter(sys.stdout, field_names, lineterminator='\n')
+    writer.writeheader()
 
-        for t in tweets[::-1]:
-            attrs = vars(t)
-            user_attrs = vars(attrs['user'])
-            del attrs['user']
-            attrs.update(user_attrs)
-            writer.writerow(attrs)
+    for t in tweets[::-1]:
+        attrs = vars(t)
+        user_attrs = vars(attrs['user'])
+        del attrs['user']
+        attrs.update(user_attrs)
+        writer.writerow(attrs)
 
 
 def main():
@@ -154,16 +159,16 @@ def main():
 
     if word:
         query = '{0} since:{1} until:{2}'.format(word, since_date, until_date)
-        output_file = '{0}.csv'.format(word)
     elif user:
         query = 'from:{0} since:{1} until:{2}'.format(user, since_date, until_date)
-        output_file = '{0}.csv'.format(user)
     else:
         return
 
     searcher = TweetSearcher(query)
     result = searcher.run()
-    write_csv(result, output_file)
+
+    if result:
+        print_csv(result)
 
 
 if __name__ == '__main__':
