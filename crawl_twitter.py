@@ -15,17 +15,18 @@ options:
     --until=<until>    until date [default: 2014-12-31]
 """
 
+
 import csv
 import json
 import random
 import sys
 import time
-from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 from collections import namedtuple
 from datetime import datetime
 from docopt import docopt
+
 
 # Structure definition
 User = namedtuple('User', ['user_id', 'user_name', 'user_screen_name'])
@@ -84,19 +85,9 @@ class TweetSearcher(object):
     def execute_search(self, payload):
 
         try:
-            # XXX: requests has error
-            # modified 2015/11/10
-            # http://stackoverflow.com/questions/21823965/use-20-instead-of-for-space-in-python-query-parameters
-
-            # response = requests.get(TweetSearcher.baseurl,  params=payload)
-
-            payload = {k: quote(v) for k, v in payload.items()}
-            url = TweetSearcher.baseurl
-            for k, v in payload.items():
-                url += k
-                url += '={}&'.format(v)
-
-            response = requests.get(url[:-1], headers=self.user_agent)
+            response = requests.get(TweetSearcher.baseurl,
+                                    params=payload,
+                                    headers=self.user_agent)
             data = json.loads(response.text, 'utf-8')
             return data
 
