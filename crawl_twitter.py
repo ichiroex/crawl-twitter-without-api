@@ -18,9 +18,10 @@ options:
 import csv
 import json
 import random
-import requests
 import sys
 import time
+from urllib.parse import quote
+import requests
 from bs4 import BeautifulSoup
 from collections import namedtuple
 from datetime import datetime
@@ -56,9 +57,9 @@ class TweetSearcher(object):
 
             if not min_tweet_id:
                 min_tweet_id = tweets[0].tweet_id
-#
+
             max_tweet_id = tweets[-1].tweet_id
-#
+
             if min_tweet_id != max_tweet_id:
                 max_position = 'TWEET-{0}-{1}'.format(max_tweet_id, min_tweet_id)
                 payload = self.construct_payload(max_position=max_position)
@@ -71,7 +72,7 @@ class TweetSearcher(object):
         payload = {
             'q': self.query,
             'f': 'tweets',
-            'lang' : 'ja'
+            'lang': 'ja',
         }
 
         if max_position is not None:
@@ -80,13 +81,26 @@ class TweetSearcher(object):
         return payload
 
     def execute_search(self, payload):
+
         try:
-            response = requests.get(TweetSearcher.baseurl, params=payload)
+            # XXX: requests has error
+            # modified 2015/11/10
+            # http://stackoverflow.com/questions/21823965/use-20-instead-of-for-space-in-python-query-parameters
+
+            # response = requests.get(TweetSearcher.baseurl,  params=payload)
+
+            payload = {k: quote(v) for k, v in payload.items()}
+            url = TweetSearcher.baseurl
+            for k, v in payload.items():
+                url += k
+                url += '={}&'.format(v)
+
+            response = requests.get(url[:-1])
             data = json.loads(response.text, 'utf-8')
             return data
 
         except ValueError as e:
-            print(e.message)
+            print(e.message, file=sys.stderr)
             print('Response Error!! wait {0} seconds'.format(self.error_delay),
                   file=sys.stderr)
             sleep(self.error_delay)
@@ -94,41 +108,44 @@ class TweetSearcher(object):
 
     @staticmethod
     def parse_tweet(html):
-        soup = BeautifulSoup(html,  'lxml')
+        soup = BeautifulSoup(html,'lxml')
         tweet_list = []
 
         for li in soup.find_all('li', class_='js-stream-item'):
             if 'data-item-id' not in li.attrs:
                 continue
 
-            # tweet id
-            tweet_id = li['data-item-id']
-    
-            # body text
-            text = li.find('p', class_='js-tweet-text').text
-    
-            # timestamp
-            unix_timestamp = li.find('span',class_='_timestamp')['data-time']
-            timestamp = datetime.fromtimestamp(int(unix_timestamp))
-    
-            # user information
-            user_tag = li.find('div', class_='tweet')
-            user = User(user_tag['data-user-id'],
-                        user_tag['data-name'],
-                        user_tag['data-screen-name'])
-    
-            # retweets
-            rt_tag = li.find('span', class_='ProfileTweet-action--retweet')
-            rt = (rt_tag.find('span',class_='ProfileTweet-actionCount')
-                  ['data-tweet-stat-count'])
-    
-            # favorites
-            fv_tag = li.find('span', class_='ProfileTweet-action--favorite')
-            fv = (fv_tag.find('span',class_='ProfileTweet-actionCount')
-                  ['data-tweet-stat-count'])
-    
-            tweet = Tweet(tweet_id, text, user, timestamp, rt, fv)
-            tweet_list.append(tweet)
+            try:
+                # tweet id
+                tweet_id = li['data-item-id']
+
+                # body text
+                text = li.find('p', class_='js-tweet-text').text
+
+                # timestamp
+                unix_timestamp = li.find('span',class_='_timestamp')['data-time']
+                timestamp = datetime.fromtimestamp(int(unix_timestamp))
+
+                # user information
+                user_tag = li.find('div', class_='tweet')
+                user = User(user_tag['data-user-id'],
+                            user_tag['data-name'],
+                            user_tag['data-screen-name'])
+
+                # retweets
+                rt_tag = li.find('span', class_='ProfileTweet-action--retweet')
+                rt = (rt_tag.find('span',class_='ProfileTweet-actionCount')
+                      ['data-tweet-stat-count'])
+
+                # favorites
+                fv_tag = li.find('span', class_='ProfileTweet-action--favorite')
+                fv = (fv_tag.find('span',class_='ProfileTweet-actionCount')
+                      ['data-tweet-stat-count'])
+
+                tweet = Tweet(tweet_id, text, user, timestamp, rt, fv)
+                tweet_list.append(tweet)
+            except:
+                continue
 
         return tweet_list
 
@@ -158,10 +175,14 @@ def main():
 
     # 'include:retweets' doesn't work now
 
+    # TODO: since and until parameters cannot work now [2015/11/10]
+
     if word:
-        query = '{0} since:{1} until:{2}'.format(word, since_date, until_date)
+        # query = '{0} since:{1} until:{2}'.format(word, since_date, until_date)
+        query = '{0}'.format(word)
     elif user:
-        query = 'from:{0} since:{1} until:{2}'.format(user, since_date, until_date)
+        # query = 'from:{0} since:{1} until:{2}'.format(user, since_date, until_date)
+        query = 'from:{0}'.format(user)
     else:
         return
 
