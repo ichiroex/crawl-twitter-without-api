@@ -35,10 +35,11 @@ Tweet = namedtuple('Tweet', ['tweet_id', 'tweet', 'user', 'timestamp', 'retweets
 class TweetSearcher(object):
     baseurl = 'https://twitter.com/i/search/timeline?'
 
-    def __init__(self, query, wait_time=0, error_delay=5):
+    def __init__(self, query, wait_time=0, error_delay=5, user_agent=None):
         self.query = query
         self.wait_time = wait_time
         self.error_delay = error_delay
+        self.user_agent = user_agent or {'User-agent': 'Mozilla/5.0'}
 
     def run(self):
         payload = self.construct_payload()
@@ -95,7 +96,7 @@ class TweetSearcher(object):
                 url += k
                 url += '={}&'.format(v)
 
-            response = requests.get(url[:-1])
+            response = requests.get(url[:-1], headers=self.user_agent)
             data = json.loads(response.text, 'utf-8')
             return data
 
@@ -175,14 +176,10 @@ def main():
 
     # 'include:retweets' doesn't work now
 
-    # TODO: since and until parameters cannot work now [2015/11/10]
-
     if word:
-        # query = '{0} since:{1} until:{2}'.format(word, since_date, until_date)
-        query = '{0}'.format(word)
+        query = '{0} since:{1} until:{2}'.format(word, since_date, until_date)
     elif user:
-        # query = 'from:{0} since:{1} until:{2}'.format(user, since_date, until_date)
-        query = 'from:{0}'.format(user)
+        query = 'from:{0} since:{1} until:{2}'.format(user, since_date, until_date)
     else:
         return
 
